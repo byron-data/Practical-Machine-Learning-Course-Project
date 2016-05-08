@@ -1,0 +1,118 @@
+---
+title: "Course Project"
+author: "Byron Stuart"
+date: "5 May 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+The goal of this project is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants and to predict the manner in which they did the exercise.
+
+The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+## Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+### Download and read in the data
+
+```{r download-data, cache=TRUE, echo=TRUE}
+#Read in the training and testing data
+trainingURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testingURL <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trainingData <- read.csv(url(trainingURL), na.strings=c("NA","#DIV/0!",""))
+testingData <- read.csv(url(testingURL), na.strings=c("NA","#DIV/0!",""))
+```
+
+### Cleanup the data by removing unnecessary columns and ones with many NAs
+
+```{r echo=TRUE}
+library(caret)
+library(randomForest)
+
+#Remove first 7 columns
+trainingData <- trainingData[-c(1:7)]
+testingData <- testingData[-c(1:7)]
+
+#colSums(is.na(trainingData)) shows columns either have 0 NAs or many NAs
+#so remove all training and testing columns with more than 1 NA
+removeCol <- names(trainingData[, colSums(is.na(trainingData)) > 0])
+trainingData <- trainingData[, -which(names(trainingData) %in% removeCol)]
+testingData <- testingData[, -which(names(testingData) %in% removeCol)]
+
+#Check that the column names (excl last column) are the same in both sets
+trainingNames <- colnames(trainingData)
+testingNames <- colnames(testingData)
+all.equal(trainingNames[1:length(trainingNames)-1], testingNames[1:length(testingNames)-1])
+```
+
+### Setup data, one set for training and one for cross validation
+
+```{r echo=TRUE}
+set.seed(33833)
+trainIndex <- createDataPartition(trainingData$classe, p=0.6, list=FALSE)
+training <- trainingData[trainIndex, ]
+testing <- trainingData[-trainIndex, ]
+dim(training)
+dim(testing)
+```
+
+**First try Generalized Boosted Regression (GBM) on the training set and then use the model on the second part of the data for cross validation**
+
+```{r GBM, cache=TRUE, echo=TRUE}
+set.seed(33833)
+modGBM <- train(classe ~ ., data=training, method="gbm", verbose=FALSE,
+                trControl=trainControl(method="repeatedcv",
+                                       number=5,
+                                       repeats=1))
+#modGBM
+plot(modGBM)
+
+#Use the created model to predict "classe" in the "testing" subset
+predictions <- predict(modGBM, testing)
+#View the confusion matrix to see the accuracy of the model
+confusionMatrix(predictions, testing$classe)
+```
+
+**Note accuracy is 96.14%, thus the expected out of sample error is 3.86%**
+
+**Next try Random Forest on the training set and then use the model on the second part of the data for cross validation**
+
+```{r RF, cache=TRUE, echo=TRUE}
+set.seed(33833)
+ModRF <- randomForest(classe ~. , data=training)
+#ModRF
+plot(ModRF)
+
+#Use the created model to predict "classe" in the "testing" subset
+predictions <- predict(ModRF, testing, type = "class")
+#View the confusion matrix to see the accuracy of the model
+confusionMatrix(predictions, testing$classe)
+```
+
+**Note accuracy is 99.44%, thus the expected out of sample error is 0.56%**
+
+### Random Forest will be used on the testing data as it has produced a better result than GBM
+
+## Use Random Forest on the testing data set
+
+```{r echo=TRUE}
+dim(testingData)
+
+predictionsTD <- predict(ModRF, testingData, type = "class")
+predictionsTD
+```
