@@ -1,2 +1,2 @@
 # PredictionAssignment
-Practical Machin Learning Course Assignment
+Practical Machine Learning Course Assignment
